@@ -298,70 +298,76 @@ export async function run(filePath: string) {
   return format(res)
 }
 
+function processLine(line: string, result: Result) {
+  const [city, temp] = line.split(';')
+  const num = Number(temp)
+
+  if (result[city]) {
+    const rec = result[city];
+    if (num < rec.min) rec.min = num;
+    if (num > rec.max) rec.max = num;
+    rec.total += num;
+    rec.count += 1;
+  } else {
+    result[city] = {
+      min: num,
+      max: num,
+      total: num,
+      count: 1,
+    }
+  }
+}
+
 export async function easyMode(filePath: string) {
-  const testStream = Bun.file(filePath).stream()
+  const stream = Bun.file(filePath).stream()
   let lineCount = 0;
   const result: Result = {}
 
   const decoder = new TextDecoder('utf8')
-  let remains = '';
-  for await (const chunk of testStream as any) {
-    // const lines = decoder.decode(chunk).split('\n')
-    // console.log(lines[lines.length - 1])
-    // lineCount += lines.length - 1
-    // console.log(lineCount)
-    decoder.decode(chunk).split('\n').forEach((line, i, arr) => {
-      if (!line) return
-      if (i === 0) {
-        // console.log(remains)
-        if (remains) {
-          line = remains + line
-          remains = ''
-          // console.log('TOTAL', line)
-        }
-        // console.log('Part 2', line)
-      }
-      if (arr.length - 1 === i && !line.match(/\d+.\d$/)) {
-        remains = line
-        // console.log('Part 1', remains)
-        return
-      }
+  let remains = Buffer.alloc(128);
+  for await (const tempChunk of stream as any) {
+    const chunk = Buffer.from(tempChunk)
+    const endOfFristLine = chunk.indexOf(10) + 1;
+    const startOfLastLine = chunk.lastIndexOf(10) + 1;
+
+    chunk.copy(remains, remains.indexOf(0), 0, endOfFristLine)
+    const toText = decoder.decode(remains.slice(0, remains.indexOf(10)))
+    processLine(toText, result)
+    remains.fill(0)
+    if (startOfLastLine !== chunk.length) chunk.copy(remains, 0, startOfLastLine)
+
+    const test = decoder.decode(chunk.slice(endOfFristLine, startOfLastLine))
+      .split('\n')
+      // .forEach(line => {
+      //   if (!line) return
+      //   lineCount++
+      //   // if (lineCount % 10000000 === 0) console.log(lineCount.toLocaleString())
+      //   processLine(line, result)
+      // })
+    for (const line of test) {
+      if (!line) break
       lineCount++
-      if (lineCount % 10000000 === 0) console.log(lineCount.toLocaleString())
-      const [city, temp] = line.split(';')
-      const num = Number(temp)
-      if (isNaN(num)) console.log(num, temp, line)
-      if (result[city]) {
-        const rec = result[city];
-        if (num < rec.min) rec.min = num;
-        if (num > rec.max) rec.max = num;
-        rec.total += num;
-        rec.count += 1;
-      } else {
-        result[city] = {
-          min: num,
-          max: num,
-          total: num,
-          count: 1,
-        }
-      }
-    })
+      // if (lineCount % 10000000 === 0) console.log(lineCount.toLocaleString())
+      processLine(line, result)
+    }
+
+    // const matches = decoder.decode(
+    //   chunk.slice(endOfFristLine, startOfLastLine)
+    // ).matchAll(/(.+);(.+)\n/g)
+
+    // for (const temp of matches) {
+    //   processLine(`${temp[1]};${temp[2]}`, result)
+    // }
   }
   return format(result)
 }
 const start = Bun.nanoseconds();
-console.log(await easyMode('../measurements.txt'))
 // console.log(await easyMode('./samples/measurements-10.txt'))
+// console.log(await easyMode('./samples/measurements-1.txt'))
+const res = await easyMode('../measurements.txt')
+console.log(res)
 console.log(`Runtime: ${(Bun.nanoseconds() - start) / 10**9} seconds`)
-
-// const x = Buffer.from('Ségou;420\nPoop;69\n')
-// console.log(x)
-// console.log(x.indexOf(59, 7))
-// console.log(x.indexOf(10))
-// const test = Buffer.alloc(100)
-// console.log(test)
-// console.log(test.byteLength, test.indexOf(0))
-// x.copyWithin()
+console.log(`${res}\n` === (await Bun.file('../notes/answer.txt').text()))
 
 // console.log(Buffer.from('Ségou').toString())
 // console.log(await run('./samples/measurements-10.txt'))
