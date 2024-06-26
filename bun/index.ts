@@ -1,53 +1,3 @@
-// import { open } from 'fs/promises'
-// 
-// export default async function run(filePath: string) {
-//   const file = await open(filePath)
-// 
-//   for await (const line of file.readLines()) {
-//     console.log(line)
-//   }
-// }
-// run('../measurements.txt')
-
-
-// async function test() {
-//   const file = Bun.file('../measurements.txt').stream();
-//   // const reader = file.getReader();
-//   let lineCount = 0;
-// 
-//   // console.log(await reader.read())
-//   // @ts-ignore
-//   for await (const chunk of file) {
-//     const str = Buffer.from(chunk).toString();
-//     lineCount += str.split(/\n/).length - 1
-//     // console.log(lineCount)
-//   }
-// }
-// 
-// async function testV2() {
-//   const file = Bun.file('../measurements.txt').stream();
-//   const reader = file.getReader();
-//   const encoder = new TextDecoder('utf-8')
-//   let lineCount = 0;
-//   // let chunk;
-// 
-//   while (true) {
-//     const { value, done } = await reader.read()
-//     if (done) break
-//     lineCount += encoder.decode(value).split(/\n/).length - 1
-//     // console.log(lineCount)
-//     // console.log(encoder.decode(value))
-//   }
-// }
-
-// const first = Bun.nanoseconds()
-// await test()
-// const second = Bun.nanoseconds()
-// console.log(`End of file: ${(second - first) / 10**9} seconds`)
-// await testV2()
-// const third = Bun.nanoseconds()
-// console.log(`End of file: ${(third - second) / 10**9} seconds`)
-
 import { open, read } from 'fs';
 
 type State = 'key' | 'val';
@@ -167,9 +117,10 @@ function readChunk(result: Result, fd: number, buf: Buffer, bufSize: number, cou
         const num = Number(decoder.decode(new Uint8Array(searchState.val)))
         const city = decoder.decode(new Uint8Array(searchState.key))
         if (total % 10000000 === 0) {
-          const newTemp = Bun.nanoseconds();
-          console.log(total.toLocaleString(), (newTemp - tempTime) / 10**9)
-          tempTime = newTemp
+          console.log(total.toLocaleString())
+          // const newTemp = Bun.nanoseconds();
+          // console.log(total.toLocaleString(), (newTemp - tempTime) / 10**9)
+          // tempTime = newTemp
         }
         if (result[city]) {
           const rec = result[city];
@@ -322,6 +273,8 @@ export async function easyMode(filePath: string) {
   const stream = Bun.file(filePath).stream()
   let lineCount = 0;
   const result: Result = {}
+  const myWorkers: Promise<Result>[]  = []
+  let chunkCount = 0;
 
   const decoder = new TextDecoder('utf8')
   let remains = Buffer.alloc(128);
@@ -338,18 +291,48 @@ export async function easyMode(filePath: string) {
 
     const test = decoder.decode(chunk.slice(endOfFristLine, startOfLastLine))
       .split('\n')
-      // .forEach(line => {
-      //   if (!line) return
-      //   lineCount++
-      //   // if (lineCount % 10000000 === 0) console.log(lineCount.toLocaleString())
-      //   processLine(line, result)
-      // })
-    for (const line of test) {
-      if (!line) break
-      lineCount++
-      // if (lineCount % 10000000 === 0) console.log(lineCount.toLocaleString())
-      processLine(line, result)
-    }
+      .forEach(line => {
+        if (!line) return
+        lineCount++
+        // if (lineCount % 10000000 === 0) console.log(lineCount.toLocaleString())
+        processLine(line, result)
+      })
+
+    // chunkCount++
+    // const worker = new Worker('worker.js')
+    // worker.postMessage({
+    //   chunk: chunk.slice(endOfFristLine, startOfLastLine),
+    //   result
+    // })
+    // worker.onmessage = (e) => {
+    //   // console.log('worker is done', e);
+    //   myWorkers.splice(chunkCount, 1)
+    //   console.log(e.data)
+    //   worker.terminate();
+    // }
+    // myWorkers[chunkCount] = worker
+    // break;
+
+    // myWorkers[chunkCount] = new Promise((resolve, reject) => {
+    //   const worker = new Worker('worker.js')
+    //   worker.postMessage({
+    //     chunk: chunk.slice(endOfFristLine, startOfLastLine),
+    //     result
+    //   })
+    //   worker.onmessage = (e) => {
+    //     // console.log('worker is done', e);
+    //     // myWorkers.splice(chunkCount, 1)
+    //     console.log(e.data)
+    //     resolve(e.data)
+    //     worker.terminate();
+
+    //   }
+    //   worker.onerror = (err) => {
+    //     reject(err);
+    //     worker.terminate();
+    //   }
+    // })
+    // chunkCount++
 
     // const matches = decoder.decode(
     //   chunk.slice(endOfFristLine, startOfLastLine)
@@ -359,6 +342,18 @@ export async function easyMode(filePath: string) {
     //   processLine(`${temp[1]};${temp[2]}`, result)
     // }
   }
+  // let running = true
+  // while (running) {
+  //   setTimeout(() => {
+  //     if (!myWorkers.length) {
+  //       running = false;
+  //     }
+  //   })
+  // }
+  console.log(myWorkers)
+  console.log('PROMISE RESULT', await Promise.all(myWorkers))
+  console.log(result)
+  
   return format(result)
 }
 const start = Bun.nanoseconds();
