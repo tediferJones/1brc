@@ -34,16 +34,17 @@ self.onmessage = async (e) => {
   const file = await open(filePath)
   const { buffer } = await file.read(Buffer.alloc(bufSize), 0, bufSize, bufSize*i)
   const endOfFirstLine = buffer.indexOf(10) + 1;
-  const startOfLastLine = buffer.lastIndexOf(10 + 1);
+  const startOfLastLine = buffer.lastIndexOf(10) + 1;
   const first = buffer.slice(0, endOfFirstLine)
   const last = buffer.slice(startOfLastLine)
   const result: Result = {}
-  // buffer.slice(endOfFirstLine, startOfLastLine).toString('utf8').split('\n').forEach(line => {
-  //   if (!line) return
-  //   processLine(line, result)
-  // })
+  buffer.slice(endOfFirstLine, startOfLastLine).toString('utf8').split('\n').forEach(line => {
+    if (!line) return
+    processLine(line, result)
+  })
   self.postMessage({
     first,
     last,
+    result
   })
 }
