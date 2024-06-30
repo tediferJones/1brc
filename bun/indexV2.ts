@@ -17,6 +17,15 @@ interface MiniResult {
   result: Result,
 }
 
+interface SomeWorker {
+  worker: Worker,
+  promiseInfo?: {
+    promise: Promise<MiniResult>,
+    resolve: Function,
+    reject: Function,
+  }
+}
+
 function processLine(line: string, result: Result) {
   const [city, temp] = line.split(';')
   const num = Number(temp)
@@ -56,28 +65,77 @@ async function run(filePath: string) {
   const finalResult: Result = {};
   let isDone = 0;
 
-  for (let i = 0; i < chunkCount; i++) {
-    // if (i > 4) break;
-    if (Object.keys(workers).length > 6) await Promise.race(Object.values(workers))
-    workers[i.toString()] = new Promise((resolve, reject) => {
+  // for (let i = 0; i < chunkCount; i++) {
+  //   // if (i > 4) break;
+  //   if (Object.keys(workers).length > 8) await Promise.race(Object.values(workers))
+  //   workers[i.toString()] = new Promise((resolve, reject) => {
+  //     const worker = new Worker('./workerV2.ts')
+  //     worker.postMessage({ filePath, i, bufSize })
+  //     worker.onmessage = (e) => {
+  //       process.stdout.clearLine(0);
+  //       process.stdout.cursorTo(0);
+  //       process.stdout.write(`${++isDone}/${chunkCount}`)
+  //       delete workers[i.toString()]
+  //       results[i] = e.data
+  //       resolve(e.data)
+  //       worker.terminate();
+  //     }
+  //     worker.onerror = (err) => {
+  //       reject(err)
+  //       throw err
+  //     }
+  //   })
+  // }
+  // await Promise.all(Object.values(workers))
+
+  class MyWorker {
+    worker: Worker;
+    promiseInfo?: {
+      promise: Promise<MiniResult>,
+      resolve: Function,
+      reject: Function,
+    }
+
+    constructor() {
       const worker = new Worker('./workerV2.ts')
-      worker.postMessage({ filePath, i, bufSize })
       worker.onmessage = (e) => {
         process.stdout.clearLine(0);
         process.stdout.cursorTo(0);
         process.stdout.write(`${++isDone}/${chunkCount}`)
-        delete workers[i.toString()]
-        results[i] = e.data
-        resolve(e.data)
-        worker.terminate();
+        results[e.data.i] = e.data
+        this.promiseInfo?.resolve()
+        this.promiseInfo = undefined;
       }
-      worker.onerror = (err) => {
-        reject(err)
-        throw err
-      }
-    })
+      worker.onerror = (err) => { throw err }
+      this.worker = worker
+    }
+
+    sendMsg(i: number) {
+      if (this.promiseInfo) throw Error('promise already exists')
+      this.worker.postMessage({ filePath, i, bufSize })
+      let resolve, reject;
+      const promise = new Promise<MiniResult>((res, rej) => {
+        [ resolve, reject ] = [ res, rej ];
+      })
+      if (!resolve || !reject) throw Error('cant find resolve and reject')
+      this.promiseInfo = { promise, resolve, reject }
+    }
   }
-  await Promise.all(Object.values(workers))
+  const myWorkers: MyWorker[] = [...Array(8).keys()].map(() => new MyWorker())
+
+  for (let i = 0; i < chunkCount; i++) {
+    let worker = myWorkers.find(worker => !worker.promiseInfo);
+    if (!worker) {
+      await Promise.race(myWorkers.map(worker => worker.promiseInfo?.promise));
+      worker = myWorkers.find(worker => !worker.promiseInfo);
+    }
+    if (!worker) throw Error('no worker')
+    worker.sendMsg(i)
+  }
+
+  await Promise.all(myWorkers.map(worker => worker.promiseInfo?.promise));
+  myWorkers.forEach(worker => worker.worker.terminate());
+
   console.log('')
   for (let i = 0; i < results.length; i++) {
     const prev = Buffer.from(results[i - 1]?.last || '')
@@ -103,12 +161,14 @@ async function run(filePath: string) {
       }
     })
   }
+  console.log('done')
   return format(finalResult)
 }
 
 const start = Bun.nanoseconds();
 const result = await run('../measurements.txt');
 const end = Bun.nanoseconds();
-console.log(result)
+// console.log(result)
 console.log(`${(end - start) / 10**9}`)
 console.log(`${result}\n` === (await Bun.file('../notes/answer.txt').text()))
+// Best time: 112.5 seconds, 8 workers, 2*24 bufSize

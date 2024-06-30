@@ -45,6 +45,7 @@ self.onmessage = async (e) => {
   self.postMessage({
     first,
     last,
-    result
+    result,
+    i,
   })
 }
