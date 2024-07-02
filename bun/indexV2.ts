@@ -61,10 +61,10 @@ class MyWorker {
       // process.stdout.clearLine(0);
       // process.stdout.cursorTo(0);
       // process.stdout.write(`${++isDone}`)
-      // results[e.data.i] = e.data
-      mergeResults(e.data.result, finalResult)
-      delete e.data.result
       results[e.data.i] = e.data
+      // mergeResults(e.data.result, finalResult)
+      // delete e.data.result
+      // results[e.data.i] = e.data
       this.promiseInfo?.resolve()
       this.promiseInfo = undefined;
     }
@@ -164,7 +164,7 @@ export async function runV2(filePath: string) {
       ]).toString('utf8'),
       finalResult,
     )
-    // mergeResults(results[i].result, finalResult)
+    mergeResults(results[i].result, finalResult)
   }
   return format(finalResult)
 }
