@@ -2,6 +2,7 @@ import { readdir } from "node:fs/promises";
 import { expect, test } from "bun:test";
 import { run, easyMode } from "./index";
 import { runV2 } from "./indexV2";
+import { runMap } from "./indexMap";
 
 const dir = await readdir('samples/')
 dir.filter(file => file.match(/\.txt$/)).toSorted().forEach(inputFile => {
@@ -9,7 +10,8 @@ dir.filter(file => file.match(/\.txt$/)).toSorted().forEach(inputFile => {
   test(inputFile, async () => {
     // const myResult = await run(`./samples/${inputFile}`)
     // const myResult = await easyMode(`./samples/${inputFile}`)
-    const myResult = await runV2(`./samples/${inputFile}`)
+    // const myResult = await runV2(`./samples/${inputFile}`)
+    const myResult = await runMap(`./samples/${inputFile}`)
     const testResult = await Bun.file(
         `./samples/${inputFile.slice(0, inputFile.lastIndexOf('.')) + '.out'}`
       ).text()
@@ -18,9 +20,9 @@ dir.filter(file => file.match(/\.txt$/)).toSorted().forEach(inputFile => {
   })
 })
 
-
 // test('test', async () => {
-//   const myResult = await run('./samples/measurements-1.txt')
+//   // const myResult = await run('./samples/measurements-1.txt')
+//   const myResult = await runMap('./samples/measurements-1.txt')
 //   const testResult = await Bun.file(
 //       './samples/measurements-1.out'
 //     ).text()
