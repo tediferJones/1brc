@@ -1,22 +1,7 @@
-import { open } from 'fs/promises'
+import { open } from 'fs/promises';
+import type { MapResult, WorkerReq, MiniMapResult } from './types';
 
-interface Result {
-  [key: string]: {
-    min: number,
-    max: number,
-    count: number,
-    total: number,
-  }
-}
-
-interface Record {
-  min: number,
-  max: number,
-  count: number,
-  total: number,
-}
-
-function processLine(line: string, result: Map<string, Record>) {
+function processLine(line: string, result: MapResult) {
   const [city, temp] = line.split(';')
   const num = Number(temp)
   const existing = result.get(city)
@@ -36,7 +21,7 @@ function processLine(line: string, result: Map<string, Record>) {
   }
 }
 
-self.onmessage = async (e) => {
+self.onmessage = async (e: { data: WorkerReq }) => {
   const { filePath, i, bufSize } = e.data;
   const file = await open(filePath)
   const { buffer } = await file.read(Buffer.alloc(bufSize), 0, bufSize, bufSize*i)
@@ -45,7 +30,7 @@ self.onmessage = async (e) => {
   const lastIndex = buffer.indexOf(0)
   const first = buffer.slice(0, endOfFirstLine)
   const last = buffer.slice(startOfLastLine, lastIndex > 0 ? lastIndex : undefined)
-  const result: Map<string, Record> = new Map();
+  const result: MapResult = new Map();
 
   let startIndex = endOfFirstLine;
   while (true) {
@@ -60,5 +45,5 @@ self.onmessage = async (e) => {
     last,
     result,
     i,
-  })
+  } satisfies MiniMapResult)
 }
