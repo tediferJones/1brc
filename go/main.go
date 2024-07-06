@@ -2,8 +2,13 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"os"
-  "math"
+	"time"
+
+	// "slices"
+	"strconv"
+	"strings"
 )
 
 type Record struct {
@@ -44,7 +49,32 @@ func findLast(findVal byte, bytes []byte) int {
   return -1
 }
 
+func processLine(val string, result map[string]Record) {
+  splitLine := strings.Split(val, ";")
+  item, ok := result[splitLine[0]]
+  num, err := strconv.ParseFloat(splitLine[1], 64)
+  check(err)
+  if ok {
+    if item.min > num {
+      item.min = num
+    }
+    if item.max < num {
+      item.max = num
+    }
+    item.total += num
+    item.count += 1
+  } else {
+    result[splitLine[0]] = Record{
+      min: num,
+      max: num,
+      total: num,
+      count: 1,
+    }
+  }
+}
+
 func main() {
+  start := time.Now()
   bufSize := int64(1 << 24)
 
   // file, err := os.ReadFile("../measurements.txt")
@@ -57,24 +87,37 @@ func main() {
   chunkCount := int(math.Ceil(float64(size) / float64(bufSize)))
   fmt.Println(size, chunkCount)
   // miniResults := []map[string]Record{}
+  result := map[string]Record{}
+  prevLine := make([]byte, 128)
+  currLine := make([]byte, 128)
 
   for i := 1; i <= chunkCount; i++ {
     fmt.Println("Scanning chunk", i)
     byteArray := make([]byte, bufSize)
     _, err2 := file.Read(byteArray)
     check(err2)
+    file.Seek(int64(i * int(bufSize)), 0)
 
-    endOfFirstLine := findFirst(byte(10), byteArray)
+    endOfFirstLine := findFirst(byte(10), byteArray) + 1
     startOfLastLine := findLast(byte(10), byteArray)
-    fmt.Println(endOfFirstLine, startOfLastLine)
+    split := strings.Split(string(byteArray[endOfFirstLine:startOfLastLine]), "\n")
 
-    // fmt.Println(string(byteArray))
+    // fmt.Println(endOfFirstLine, startOfLastLine)
+    // fmt.Println("first:", split[0], "last:", split[len(split) - 1])
 
-    break
+    currLine = append(currLine, byteArray[:endOfFirstLine]...)
+    // fmt.Println(string(currLine), string(prevLine))
+    // fullLine := string(append(currLine, prevLine[:len(prevLine) - 2]...))
+    // fmt.Println(fullLine)
+    // processLine(fullLine, result)
+
+    prevLine = append(prevLine, byteArray[startOfLastLine:]...)
+
+    // we need to do some resetting of firstLine and/or lastLine around here
+
+    for _, val := range split {
+      processLine(val, result)
+    }
   }
-
-  // byteArray := make([]byte, bufSize)
-  // _, err2 := file.Read(byteArray)
-  // check(err2)
-  // fmt.Printf(string(byteArray) + "\n")
+  fmt.Println(time.Now().Sub(start))
 }
