@@ -4,9 +4,8 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"sort"
 	"time"
-
-	// "slices"
 	"strconv"
 	"strings"
 )
@@ -18,11 +17,11 @@ type Record struct {
   count int64
 }
 
-type MiniResult struct {
-  First []byte
-  Last []byte
-  Result map[string]Record
-}
+// type MiniResult struct {
+//   First []byte
+//   Last []byte
+//   Result map[string]Record
+// }
 
 func check(e error) {
   if e != nil {
@@ -64,20 +63,47 @@ func processLine(val string, result map[string]Record) {
     item.total += num
     item.count += 1
   } else {
-    result[splitLine[0]] = Record{
+    item = Record{
       min: num,
       max: num,
       total: num,
       count: 1,
     }
   }
+  result[splitLine[0]] = item
+}
+
+func getSortedKeys(result map[string]Record) []string {
+  var keys []string
+  for key := range result {
+    keys = append(keys, key)
+  }
+  sort.Strings(keys)
+  return keys
+}
+
+func roundFloat(num float64) float32 {
+  return float32(math.Round(num * 10) / 10)
+}
+
+func prettyPrint(result map[string]Record) string {
+  finalString := "{"
+  for _, key := range getSortedKeys(result) {
+    finalString += fmt.Sprintf(
+      "%s=%.1f/%.1f/%.1f, ",
+      key,
+      roundFloat(result[key].min),
+      roundFloat(result[key].total / float64(result[key].count)),
+      roundFloat(result[key].max),
+      )
+  }
+  return finalString[:len(finalString) - 2] + "}\n"
 }
 
 func main() {
   start := time.Now()
   bufSize := int64(1 << 24)
 
-  // file, err := os.ReadFile("../measurements.txt")
   file, err := os.Open("../measurements.txt")
   check(err)
 
@@ -86,12 +112,12 @@ func main() {
   size := fileInfo.Size()
   chunkCount := int(math.Ceil(float64(size) / float64(bufSize)))
   fmt.Println(size, chunkCount)
-  // miniResults := []map[string]Record{}
   result := map[string]Record{}
-  prevLine := make([]byte, 128)
-  currLine := make([]byte, 128)
+  var prevLine []byte
+  var currLine []byte
 
   for i := 1; i <= chunkCount; i++ {
+    // if (i > 3) { break }
     fmt.Println("Scanning chunk", i)
     byteArray := make([]byte, bufSize)
     _, err2 := file.Read(byteArray)
@@ -102,22 +128,23 @@ func main() {
     startOfLastLine := findLast(byte(10), byteArray)
     split := strings.Split(string(byteArray[endOfFirstLine:startOfLastLine]), "\n")
 
-    // fmt.Println(endOfFirstLine, startOfLastLine)
-    // fmt.Println("first:", split[0], "last:", split[len(split) - 1])
-
     currLine = append(currLine, byteArray[:endOfFirstLine]...)
-    // fmt.Println(string(currLine), string(prevLine))
-    // fullLine := string(append(currLine, prevLine[:len(prevLine) - 2]...))
-    // fmt.Println(fullLine)
-    // processLine(fullLine, result)
-
-    prevLine = append(prevLine, byteArray[startOfLastLine:]...)
-
-    // we need to do some resetting of firstLine and/or lastLine around here
+    fullLine := string(append(prevLine, currLine...))
+    processLine(fullLine[:len(fullLine) - 1], result)
+    prevLine = byteArray[startOfLastLine + 1:]
+    currLine = []byte{}
 
     for _, val := range split {
       processLine(val, result)
     }
   }
+
+  myAnswer := prettyPrint(result)
+
+  fmt.Print(myAnswer)
   fmt.Println(time.Now().Sub(start))
+
+  content, err := os.ReadFile("../notes/answer.txt")
+  check(err)
+  fmt.Println(string(content) == (myAnswer + "\n"))
 }
