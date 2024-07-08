@@ -5,9 +5,10 @@ import (
 	"math"
 	"os"
 	"sort"
-	"time"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 )
 
 type Record struct {
@@ -49,8 +50,10 @@ func findLast(findVal byte, bytes []byte) int {
 }
 
 func processLine(val string, result map[string]Record) {
+// func processLine(val string, result *map[string]Record) {
+  // fmt.Println("THIS IS THE VAL", val, len(val))
   splitLine := strings.Split(val, ";")
-  item, ok := result[splitLine[0]]
+  item, ok := (result)[splitLine[0]]
   num, err := strconv.ParseFloat(splitLine[1], 64)
   check(err)
   if ok {
@@ -70,7 +73,7 @@ func processLine(val string, result map[string]Record) {
       count: 1,
     }
   }
-  result[splitLine[0]] = item
+  (result)[splitLine[0]] = item
 }
 
 func getSortedKeys(result map[string]Record) []string {
@@ -97,7 +100,121 @@ func prettyPrint(result map[string]Record) string {
       roundFloat(result[key].max),
       )
   }
+  fmt.Println(finalString)
   return finalString[:len(finalString) - 2] + "}\n"
+}
+
+// func main() {
+//   start := time.Now()
+//   bufSize := int64(1 << 24)
+// 
+//   file, err := os.Open("../measurements.txt")
+//   check(err)
+// 
+//   fileInfo, err := file.Stat()
+//   check(err)
+//   size := fileInfo.Size()
+//   chunkCount := int(math.Ceil(float64(size) / float64(bufSize)))
+//   fmt.Println(size, chunkCount)
+//   result := map[string]Record{}
+//   var prevLine []byte
+//   var currLine []byte
+// 
+//   for i := 1; i <= chunkCount; i++ {
+//     // if (i > 3) { break }
+//     fmt.Println("Scanning chunk", i)
+//     byteArray := make([]byte, bufSize)
+//     _, err2 := file.Read(byteArray)
+//     check(err2)
+//     file.Seek(int64(i * int(bufSize)), 0)
+// 
+//     endOfFirstLine := findFirst(byte(10), byteArray) + 1
+//     startOfLastLine := findLast(byte(10), byteArray)
+//     split := strings.Split(string(byteArray[endOfFirstLine:startOfLastLine]), "\n")
+// 
+//     currLine = append(currLine, byteArray[:endOfFirstLine]...)
+//     fullLine := string(append(prevLine, currLine...))
+//     processLine(fullLine[:len(fullLine) - 1], result)
+//     prevLine = byteArray[startOfLastLine + 1:]
+//     currLine = []byte{}
+// 
+//     for _, val := range split {
+//       processLine(val, result)
+//     }
+//   }
+// 
+//   myAnswer := prettyPrint(result)
+// 
+//   fmt.Print(myAnswer)
+//   fmt.Println(time.Now().Sub(start))
+// 
+//   content, err := os.ReadFile("../notes/answer.txt")
+//   check(err)
+//   fmt.Println(string(content) == (myAnswer + "\n"))
+// }
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+type Partial struct {
+  first []byte
+  last []byte
+  index int
+  miniResult map[string]Record
+}
+
+func processChunk(
+  file *os.File,
+  chunkIndex int,
+  bufSize int,
+  // result map[string]Record,
+  // prevLine *[]byte,
+  // currLine *[]byte,
+  partialLines *[]Partial,
+  wg *sync.WaitGroup,
+  semaphore chan struct{},
+) {
+  fmt.Println("Scanning chunk", chunkIndex)
+  byteArray := make([]byte, bufSize)
+  file.Seek(int64(chunkIndex * int(bufSize)), 0)
+  _, err2 := file.Read(byteArray)
+  if err2 != nil {
+    // fmt.Println(err2, byteArray)
+    <- semaphore
+    wg.Done()
+    fmt.Println("Found read error:", err2)
+    return
+  }
+  check(err2)
+
+  endOfFirstLine := findFirst(byte(10), byteArray) + 1
+  startOfLastLine := findLast(byte(10), byteArray) + 1
+  split := strings.Split(string(byteArray[endOfFirstLine:startOfLastLine - 1]), "\n")
+  miniResult := map[string]Record{}
+
+  // *currLine = append(*currLine, byteArray[:endOfFirstLine]...)
+  // fullLine := string(append(*prevLine, *currLine...))
+  // processLine(fullLine[:len(fullLine) - 1], result)
+  // *prevLine = byteArray[startOfLastLine:]
+  // *currLine = []byte{}
+
+  for _, val := range split {
+    if (len(val) > 0) {
+      // processLine(val, result)
+      processLine(val, miniResult)
+    }
+  }
+
+  var prevLine []byte
+  var currLine []byte
+  *partialLines = append(*partialLines, Partial{
+    first: append(currLine, byteArray[:endOfFirstLine]...),
+    last: append(prevLine, byteArray[startOfLastLine:]...),
+    index: chunkIndex,
+    miniResult: miniResult,
+  })
+  <- semaphore
+  defer wg.Done()
+  defer fmt.Println("Done with", chunkIndex)
 }
 
 func main() {
@@ -111,38 +228,46 @@ func main() {
   check(err)
   size := fileInfo.Size()
   chunkCount := int(math.Ceil(float64(size) / float64(bufSize)))
+  // chunkCount := 8
   fmt.Println(size, chunkCount)
   result := map[string]Record{}
-  var prevLine []byte
-  var currLine []byte
 
-  for i := 1; i <= chunkCount; i++ {
-    // if (i > 3) { break }
-    fmt.Println("Scanning chunk", i)
-    byteArray := make([]byte, bufSize)
-    _, err2 := file.Read(byteArray)
-    check(err2)
-    file.Seek(int64(i * int(bufSize)), 0)
+  partialLines := []Partial{}
 
-    endOfFirstLine := findFirst(byte(10), byteArray) + 1
-    startOfLastLine := findLast(byte(10), byteArray)
-    split := strings.Split(string(byteArray[endOfFirstLine:startOfLastLine]), "\n")
+  // var prevLine []byte
+  // var currLine []byte
 
-    currLine = append(currLine, byteArray[:endOfFirstLine]...)
-    fullLine := string(append(prevLine, currLine...))
-    processLine(fullLine[:len(fullLine) - 1], result)
-    prevLine = byteArray[startOfLastLine + 1:]
-    currLine = []byte{}
+  var wg sync.WaitGroup
+  // wg.Add(chunkCount)
+  maxGoRoutines := 8
+  semaphore := make(chan struct{}, maxGoRoutines)
 
-    for _, val := range split {
-      processLine(val, result)
-    }
+  // We dont need result to be a pointer (allegedly)
+  // So in theory we can just build up result while we multithread
+  // And then handle the partial lines synchronously afterwards
+  //  - Keep the items in order in an array, and then just loop through
+  //  - Cant insert at specific index in go so add a count and just append to the array
+  //    and sort by count before looping through
+
+  for i := 0; i < chunkCount; i++ {
+    // if (i > 8) { break }
+    // processChunk(file, i, int(bufSize), result, &partialLines)
+
+    wg.Add(1)
+    semaphore <- struct{}{}
+    go processChunk(file, i, int(bufSize), &partialLines, &wg, semaphore)
   }
+  fmt.Println("Waiting for go routines")
+  wg.Wait()
+  fmt.Println("All Go routines are done")
+  fmt.Println(time.Now().Sub(start))
 
+  // fmt.Println(partialLines)
+  // MERGE RESULTS SOMEWHERE AROUND HERE
   myAnswer := prettyPrint(result)
 
-  fmt.Print(myAnswer)
-  fmt.Println(time.Now().Sub(start))
+  // fmt.Print(myAnswer)
+  // fmt.Println(time.Now().Sub(start))
 
   content, err := os.ReadFile("../notes/answer.txt")
   check(err)
