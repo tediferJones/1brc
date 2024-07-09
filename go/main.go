@@ -100,7 +100,6 @@ func prettyPrint(result map[string]Record) string {
       roundFloat(result[key].max),
       )
   }
-  fmt.Println(finalString)
   return finalString[:len(finalString) - 2] + "}\n"
 }
 
@@ -198,7 +197,7 @@ func processChunk(
   // *currLine = []byte{}
 
   for _, val := range split {
-    if (len(val) > 0) {
+    if len(val) > 0 {
       // processLine(val, result)
       processLine(val, miniResult)
     }
@@ -206,6 +205,7 @@ func processChunk(
 
   var prevLine []byte
   var currLine []byte
+  fmt.Println("PUSHING", chunkIndex)
   *partialLines = append(*partialLines, Partial{
     first: append(currLine, byteArray[:endOfFirstLine]...),
     last: append(prevLine, byteArray[startOfLastLine:]...),
@@ -215,6 +215,45 @@ func processChunk(
   <- semaphore
   defer wg.Done()
   defer fmt.Println("Done with", chunkIndex)
+}
+
+func mergeLines(partialLines []Partial, result map[string]Record) {
+  for _, miniRes := range partialLines {
+    fmt.Println(miniRes.index, string(miniRes.last), string(miniRes.first))
+  }
+  for i := 0; i < len(partialLines); i++ {
+    fmt.Println(partialLines[i].index)
+    var last []byte
+    if i - 1 >= 0 {
+      last = partialLines[i - 1].last
+    }
+    fmt.Println("Last", last, "first", partialLines[i].first)
+    mergedLine := string(append(last, partialLines[i].first...))
+    fmt.Println("MERGING", mergedLine)
+    processLine(mergedLine[:len(mergedLine) - 1], result)
+    fmt.Println("~~~~~~~~")
+
+    for key := range partialLines[i].miniResult {
+      finalItem, finalOk := result[key]
+      partialItem, partialOk := partialLines[i].miniResult[key]
+      if partialOk == false {
+        panic("partial not found")
+      }
+      if finalOk {
+        if finalItem.min > partialItem.min {
+          finalItem.min = partialItem.min
+        }
+        if finalItem.max < partialItem.max {
+          finalItem.max = partialItem.max
+        }
+        finalItem.total += partialItem.total
+        finalItem.count += partialItem.count
+      } else {
+        finalItem = partialItem
+      }
+      result[key] = finalItem
+    }
+  }
 }
 
 func main() {
@@ -239,7 +278,7 @@ func main() {
 
   var wg sync.WaitGroup
   // wg.Add(chunkCount)
-  maxGoRoutines := 8
+  maxGoRoutines := 2
   semaphore := make(chan struct{}, maxGoRoutines)
 
   // We dont need result to be a pointer (allegedly)
@@ -251,7 +290,7 @@ func main() {
 
   for i := 0; i < chunkCount; i++ {
     // if (i > 8) { break }
-    // processChunk(file, i, int(bufSize), result, &partialLines)
+    // processChunk(file, i, int(bufSize), &partialLines)
 
     wg.Add(1)
     semaphore <- struct{}{}
@@ -262,11 +301,16 @@ func main() {
   fmt.Println("All Go routines are done")
   fmt.Println(time.Now().Sub(start))
 
+  sort.Slice(partialLines, func(i, j int) bool {
+    return partialLines[i].index < partialLines[j].index
+  })
+  mergeLines(partialLines, result)
+
   // fmt.Println(partialLines)
   // MERGE RESULTS SOMEWHERE AROUND HERE
   myAnswer := prettyPrint(result)
 
-  // fmt.Print(myAnswer)
+  fmt.Print(myAnswer)
   // fmt.Println(time.Now().Sub(start))
 
   content, err := os.ReadFile("../notes/answer.txt")
