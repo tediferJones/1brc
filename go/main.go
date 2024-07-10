@@ -162,7 +162,8 @@ type Partial struct {
 }
 
 func processChunk(
-  file *os.File,
+  // file *os.File,
+  filePath string,
   chunkIndex int,
   bufSize int,
   // result map[string]Record,
@@ -171,9 +172,12 @@ func processChunk(
   partialLines *[]Partial,
   wg *sync.WaitGroup,
   semaphore chan struct{},
+  mutex *sync.Mutex,
 ) {
-  fmt.Println("Scanning chunk", chunkIndex)
+  // fmt.Println("Scanning chunk", chunkIndex)
   byteArray := make([]byte, bufSize)
+  file, err := os.Open(filePath)
+  check(err)
   file.Seek(int64(chunkIndex * int(bufSize)), 0)
   _, err2 := file.Read(byteArray)
   if err2 != nil {
@@ -205,33 +209,35 @@ func processChunk(
 
   var prevLine []byte
   var currLine []byte
-  fmt.Println("PUSHING", chunkIndex)
+  // fmt.Println("PUSHING", chunkIndex)
+  mutex.Lock()
   *partialLines = append(*partialLines, Partial{
     first: append(currLine, byteArray[:endOfFirstLine]...),
     last: append(prevLine, byteArray[startOfLastLine:]...),
     index: chunkIndex,
     miniResult: miniResult,
   })
+  mutex.Unlock()
   <- semaphore
   defer wg.Done()
-  defer fmt.Println("Done with", chunkIndex)
+  // defer fmt.Println("Done with", chunkIndex)
 }
 
 func mergeLines(partialLines []Partial, result map[string]Record) {
-  for _, miniRes := range partialLines {
-    fmt.Println(miniRes.index, string(miniRes.last), string(miniRes.first))
-  }
+  // for _, miniRes := range partialLines {
+  //   fmt.Println(miniRes.index, string(miniRes.last), string(miniRes.first))
+  // }
   for i := 0; i < len(partialLines); i++ {
-    fmt.Println(partialLines[i].index)
+    // fmt.Println(partialLines[i].index)
     var last []byte
     if i - 1 >= 0 {
       last = partialLines[i - 1].last
     }
-    fmt.Println("Last", last, "first", partialLines[i].first)
+    // fmt.Println("Last", last, "first", partialLines[i].first)
     mergedLine := string(append(last, partialLines[i].first...))
-    fmt.Println("MERGING", mergedLine)
+    // fmt.Println("MERGING", mergedLine)
     processLine(mergedLine[:len(mergedLine) - 1], result)
-    fmt.Println("~~~~~~~~")
+    // fmt.Println("~~~~~~~~")
 
     for key := range partialLines[i].miniResult {
       finalItem, finalOk := result[key]
@@ -259,8 +265,9 @@ func mergeLines(partialLines []Partial, result map[string]Record) {
 func main() {
   start := time.Now()
   bufSize := int64(1 << 24)
+  filePath := "../measurements.txt"
 
-  file, err := os.Open("../measurements.txt")
+  file, err := os.Open(filePath)
   check(err)
 
   fileInfo, err := file.Stat()
@@ -272,13 +279,14 @@ func main() {
   result := map[string]Record{}
 
   partialLines := []Partial{}
+  var mutex sync.Mutex
 
   // var prevLine []byte
   // var currLine []byte
 
   var wg sync.WaitGroup
   // wg.Add(chunkCount)
-  maxGoRoutines := 2
+  maxGoRoutines := 16
   semaphore := make(chan struct{}, maxGoRoutines)
 
   // We dont need result to be a pointer (allegedly)
@@ -294,12 +302,19 @@ func main() {
 
     wg.Add(1)
     semaphore <- struct{}{}
-    go processChunk(file, i, int(bufSize), &partialLines, &wg, semaphore)
+    go processChunk(
+      filePath,
+      i,
+      int(bufSize),
+      &partialLines,
+      &wg,
+      semaphore,
+      &mutex,
+      )
   }
   fmt.Println("Waiting for go routines")
   wg.Wait()
   fmt.Println("All Go routines are done")
-  fmt.Println(time.Now().Sub(start))
 
   sort.Slice(partialLines, func(i, j int) bool {
     return partialLines[i].index < partialLines[j].index
@@ -310,7 +325,8 @@ func main() {
   // MERGE RESULTS SOMEWHERE AROUND HERE
   myAnswer := prettyPrint(result)
 
-  fmt.Print(myAnswer)
+  // fmt.Print(myAnswer)
+  fmt.Println(time.Now().Sub(start))
   // fmt.Println(time.Now().Sub(start))
 
   content, err := os.ReadFile("../notes/answer.txt")
