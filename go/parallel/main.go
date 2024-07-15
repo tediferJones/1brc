@@ -111,7 +111,7 @@ func processChunk(
   semaphore chan struct{},
   mutex *sync.Mutex,
 ) {
-  // fmt.Println("Scanning chunk", chunkIndex)
+  fmt.Println("Scanning chunk", chunkIndex)
   byteArray := make([]byte, bufSize)
   file, err := os.Open(filePath)
   check(err)
@@ -130,6 +130,10 @@ func processChunk(
   split := strings.Split(string(byteArray[endOfFirstLine:startOfLastLine - 1]), "\n")
   miniResult := map[string]Record{}
 
+  // MOST OF OUR TIME IS SPENT HERE
+  // - We want to process all the full lines in a goroutine
+  // - But will this really help? this function is already a goroutine,
+  //   so will moving this to another goroutine really improve anything?
   for _, val := range split {
     if len(val) > 0 {
       processLine(val, miniResult)
@@ -150,7 +154,7 @@ func processChunk(
   mutex.Unlock()
   <- semaphore
   defer wg.Done()
-  // defer fmt.Println("Done with", chunkIndex)
+  defer fmt.Println("Done with", chunkIndex)
 }
 
 func mergeLines(partialLines []Partial, result map[string]Record) {
@@ -205,7 +209,7 @@ func main() {
   var mutex sync.Mutex
   var wg sync.WaitGroup
   // maxGoRoutines := 16
-  maxGoRoutines := 2
+  maxGoRoutines := 16
   semaphore := make(chan struct{}, maxGoRoutines)
 
   for i := 0; i < chunkCount; i++ {

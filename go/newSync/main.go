@@ -5,8 +5,8 @@ import (
 	"math"
 	"os"
 	"sort"
-	// "strconv"
-	// "strings"
+	"strconv"
+	"strings"
 	// "sync"
 	"time"
 )
@@ -82,31 +82,31 @@ func processChunk(
 
   *startIndex = *startIndex + lastNewLine + 1
 
-  // split := strings.Split(string(myBuffer[:lastNewLine]), "\n")
-  // for _, line := range split {
-  //   splitLine := strings.Split(line, ";")
-  //   item, ok := (result)[splitLine[0]]
-  //   num, err := strconv.ParseFloat(splitLine[1], 64)
-  //   check(err)
-  //   if ok {
-  //     if item.min > num {
-  //       item.min = num
-  //     }
-  //     if item.max < num {
-  //       item.max = num
-  //     }
-  //     item.total += num
-  //     item.count += 1
-  //   } else {
-  //     item = Record{
-  //       min: num,
-  //       max: num,
-  //       total: num,
-  //       count: 1,
-  //     }
-  //   }
-  //   (result)[splitLine[0]] = item
-  // }
+  split := strings.Split(string(myBuffer[:lastNewLine]), "\n")
+  for _, line := range split {
+    splitLine := strings.Split(line, ";")
+    item, ok := (result)[splitLine[0]]
+    num, err := strconv.ParseFloat(splitLine[1], 64)
+    check(err)
+    if ok {
+      if item.min > num {
+        item.min = num
+      }
+      if item.max < num {
+        item.max = num
+      }
+      item.total += num
+      item.count += 1
+    } else {
+      item = Record{
+        min: num,
+        max: num,
+        total: num,
+        count: 1,
+      }
+    }
+    (result)[splitLine[0]] = item
+  }
 }
 
 func main() {
