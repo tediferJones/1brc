@@ -40,6 +40,15 @@ func findFirst(findVal byte, bytes []byte) int {
   return -1
 }
 
+func findFirstFrom(findVal byte, bytes []byte, from int) int {
+  for i, val := range bytes[from:] {
+    if val == findVal {
+      return i + from
+    }
+  }
+  return -1
+}
+
 func findLast(findVal byte, bytes []byte) int {
   for i := range bytes {
     index := len(bytes) - i - 1
@@ -111,33 +120,40 @@ func processChunk(
   semaphore chan struct{},
   mutex *sync.Mutex,
 ) {
-  fmt.Println("Scanning chunk", chunkIndex)
+  // fmt.Println("Scanning chunk", chunkIndex)
   byteArray := make([]byte, bufSize)
   file, err := os.Open(filePath)
   check(err)
   file.Seek(int64(chunkIndex * int(bufSize)), 0)
   _, err2 := file.Read(byteArray)
-  if err2 != nil {
-    <- semaphore
-    wg.Done()
-    fmt.Println("Found read error:", err2)
-    return
-  }
+  // if err2 != nil {
+  //   <- semaphore
+  //   wg.Done()
+  //   fmt.Println("Found read error:", err2)
+  //   return
+  // }
   check(err2)
 
   endOfFirstLine := findFirst(byte(10), byteArray) + 1
   startOfLastLine := findLast(byte(10), byteArray) + 1
-  split := strings.Split(string(byteArray[endOfFirstLine:startOfLastLine - 1]), "\n")
   miniResult := map[string]Record{}
 
-  // MOST OF OUR TIME IS SPENT HERE
-  // - We want to process all the full lines in a goroutine
-  // - But will this really help? this function is already a goroutine,
-  //   so will moving this to another goroutine really improve anything?
-  for _, val := range split {
-    if len(val) > 0 {
-      processLine(val, miniResult)
-    }
+  // split := strings.Split(string(byteArray[endOfFirstLine:startOfLastLine - 1]), "\n")
+  // for _, val := range split {
+  //   if len(val) > 0 {
+  //     processLine(val, miniResult)
+  //   }
+  // }
+
+  startIndex := 0
+  chunkData := byteArray[endOfFirstLine:startOfLastLine]
+  for startIndex < len(chunkData) {
+    finalIndex := findFirstFrom(10, chunkData, startIndex)
+    processLine(
+      string(chunkData[startIndex:finalIndex]),
+      miniResult,
+      )
+    startIndex = finalIndex + 1
   }
 
   var prevLine []byte
@@ -146,8 +162,6 @@ func processChunk(
   *partialLines = append(*partialLines, Partial{
     first: append(currLine, byteArray[:endOfFirstLine]...),
     last: append(prevLine, byteArray[startOfLastLine:]...),
-    // first: byteArray[:endOfFirstLine],
-    // last: byteArray[startOfLastLine:],
     index: chunkIndex,
     miniResult: miniResult,
   })
@@ -192,6 +206,7 @@ func mergeLines(partialLines []Partial, result map[string]Record) {
 func main() {
   start := time.Now()
   bufSize := int64(1 << 24)
+  // bufSize := int64(1 << 27)
   filePath := "../measurements.txt"
 
   file, err := os.Open(filePath)
@@ -201,14 +216,12 @@ func main() {
   check(err)
   size := fileInfo.Size()
   chunkCount := int(math.Ceil(float64(size) / float64(bufSize)))
-  // chunkCount := 8
   fmt.Println(size, chunkCount)
   result := map[string]Record{}
 
   partialLines := []Partial{}
   var mutex sync.Mutex
   var wg sync.WaitGroup
-  // maxGoRoutines := 16
   maxGoRoutines := 16
   semaphore := make(chan struct{}, maxGoRoutines)
 
