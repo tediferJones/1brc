@@ -1,6 +1,9 @@
+import concurrent.futures
+import os
 from typing import Dict, List, TypedDict
 import time
 import difflib
+import math
 
 class Record(TypedDict):
     min: float
@@ -15,7 +18,15 @@ class PartialResult(TypedDict):
     last: bytes
     miniResult: Result
 
-def mergeResults(partialResults: List[PartialResult]):
+class PartialResultV2(TypedDict):
+    first: bytes
+    last: bytes
+    miniResult: Result
+    chunkCount: int
+
+MiniResults = List[PartialResultV2]
+
+def mergeResults(partialResults: MiniResults):
     finalResult: Result = {}
     for i, partialResult in enumerate(partialResults):
         if i > 0:
@@ -71,6 +82,56 @@ def processLine(line: str, miniResult: Result):
             'count': 1,
         }
 
+def processChunk(chunk: bytes) -> PartialResult:
+    endOfFirstLine = chunk.find(10) + 1
+    startOfLastLine = chunk.rfind(10) + 1
+    miniResult: Result = {}
+
+    mainChunk = chunk[endOfFirstLine:startOfLastLine]
+    startIndex = 0
+    while startIndex < len(mainChunk):
+        endOfNextLine = mainChunk.find(10, startIndex)
+        if (endOfNextLine == -1):
+            endOfNextLine = len(mainChunk)
+
+        line = mainChunk[startIndex:endOfNextLine].decode('utf-8')
+        startIndex = endOfNextLine + 1
+        processLine(line, miniResult)
+
+    return {
+        'first': chunk[:endOfFirstLine],
+        'last': chunk[startOfLastLine:],
+        'miniResult': miniResult,
+    }
+
+def processChunkV2(filePath: str, chunkCount: int, chunkSize: int) -> PartialResultV2:
+    print(chunkCount)
+    file = open(filePath, 'rb')
+    file.seek(chunkCount * chunkSize)
+    chunk = file.read(chunkSize)
+
+    endOfFirstLine = chunk.find(10) + 1
+    startOfLastLine = chunk.rfind(10) + 1
+    miniResult: Result = {}
+
+    mainChunk = chunk[endOfFirstLine:startOfLastLine]
+    startIndex = 0
+    while startIndex < len(mainChunk):
+        endOfNextLine = mainChunk.find(10, startIndex)
+        if (endOfNextLine == -1):
+            endOfNextLine = len(mainChunk)
+
+        line = mainChunk[startIndex:endOfNextLine].decode('utf-8')
+        startIndex = endOfNextLine + 1
+        processLine(line, miniResult)
+
+    return {
+        'first': chunk[:endOfFirstLine],
+        'last': chunk[startOfLastLine:],
+        'miniResult': miniResult,
+        'chunkCount': chunkCount
+    }
+
 def main():
     print('Main func');
     start = time.time()
@@ -78,56 +139,56 @@ def main():
     file = open(filePath, 'rb')
     chunkSize = 1 << 24
     count = 0
-    miniResults: List[PartialResult] = []
-    while True:
-        chunk = file.read(chunkSize)
-        if not chunk:
-            break
+    # miniResults: List[PartialResult] = []
+    # chunkCount = math.ceil(os.fstat(file.fileno()).st_size / chunkSize)
 
-        count += 1
-        print(count)
-        # if count > 4:
-        #     break
+    miniResults: MiniResults = []
+    # for i in range(chunkCount):
+    #     miniResults.append(
+    #         processChunkV2(filePath, i, chunkSize)
+    #     )
+    #     print(time.time() - start)
+    num_threads = 64
+    chunkCount = math.ceil(os.fstat(file.fileno()).st_size / chunkSize)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
+        futures = [executor.submit(processChunkV2, filePath, i, chunkSize) for i in range(chunkCount)]
+        
+        for future in concurrent.futures.as_completed(futures):
+            print('DONE', time.time() - start)
+            miniResults.append(
+                future.result()
+            )
+    miniResults = sorted(miniResults, key=lambda x: x['chunkCount'])
 
-        endOfFirstLine = chunk.find(10) + 1
-        startOfLastLine = chunk.rfind(10) + 1
-        miniResult: Result = {}
-        # print(len(chunk), print(startOfLastLine), print(endOfFirstLine))
+    # while True:
+    #     chunk = file.read(chunkSize)
+    #     if not chunk:
+    #         break
 
-        mainChunk = chunk[endOfFirstLine:startOfLastLine]
-        startIndex = 0
-        while startIndex < len(mainChunk):
-            endOfNextLine = mainChunk.find(10, startIndex)
-            if (endOfNextLine == -1):
-                endOfNextLine = len(mainChunk)
+    #     count += 1
+    #     print(count)
+    #     # processChunk(chunk)
 
-            line = mainChunk[startIndex:endOfNextLine].decode('utf-8')
-            startIndex = endOfNextLine + 1
-            processLine(line, miniResult)
-            # city, num = line.split(';')
-            # temp = float(num)
+    #     endOfFirstLine = chunk.find(10) + 1
+    #     startOfLastLine = chunk.rfind(10) + 1
+    #     miniResult: Result = {}
 
-            # if city in miniResult:
-            #     if miniResult[city]['min'] > temp:
-            #         miniResult[city]['min'] = temp
-            #     if miniResult[city]['max'] < temp:
-            #         miniResult[city]['max'] = temp
-            #     miniResult[city]['total'] += temp
-            #     miniResult[city]['count'] += 1
-            # else:
-            #     miniResult[city] = {
-            #         'min': temp,
-            #         'max': temp,
-            #         'total': temp,
-            #         'count': 1,
-            #     }
+    #     mainChunk = chunk[endOfFirstLine:startOfLastLine]
+    #     startIndex = 0
+    #     while startIndex < len(mainChunk):
+    #         endOfNextLine = mainChunk.find(10, startIndex)
+    #         if (endOfNextLine == -1):
+    #             endOfNextLine = len(mainChunk)
 
-        miniResults.append({
-            'first': chunk[:endOfFirstLine],
-            'last': chunk[startOfLastLine:],
-            'miniResult': miniResult,
-        })
-        # print('Chunk Time:', time.time() - start)
+    #         line = mainChunk[startIndex:endOfNextLine].decode('utf-8')
+    #         startIndex = endOfNextLine + 1
+    #         processLine(line, miniResult)
+
+    #     miniResults.append({
+    #         'first': chunk[:endOfFirstLine],
+    #         'last': chunk[startOfLastLine:],
+    #         'miniResult': miniResult,
+    #     })
 
     finalResult = mergeResults(miniResults)
     finalString = prettyPrint(finalResult)
