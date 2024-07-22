@@ -1,10 +1,8 @@
-import concurrent.futures
 import os
-from typing import Dict, List, TypedDict
-import time
-import difflib
 import math
+import time
 from multiprocessing import Pool
+from typing import Dict, List, TypedDict
 
 class Record(TypedDict):
     min: float
@@ -18,14 +16,9 @@ class PartialResult(TypedDict):
     first: bytes
     last: bytes
     miniResult: Result
+    # chunkCount: int
 
-class PartialResultV2(TypedDict):
-    first: bytes
-    last: bytes
-    miniResult: Result
-    chunkCount: int
-
-MiniResults = List[PartialResultV2]
+MiniResults = List[PartialResult]
 
 def processLine(line: str, miniResult: Result):
     city, num = line.split(';')
@@ -46,7 +39,7 @@ def processLine(line: str, miniResult: Result):
             'count': 1,
         }
 
-def processChunk(filePath: str, chunkCount: int, chunkSize: int) -> PartialResultV2:
+def processChunk(filePath: str, chunkCount: int, chunkSize: int) -> PartialResult:
     file = open(filePath, 'rb')
     file.seek(chunkCount * chunkSize)
     chunk = file.read(chunkSize)
@@ -71,16 +64,13 @@ def processChunk(filePath: str, chunkCount: int, chunkSize: int) -> PartialResul
         'first': chunk[:endOfFirstLine],
         'last': chunk[startOfLastLine:],
         'miniResult': miniResult,
-        'chunkCount': chunkCount
+        # 'chunkCount': chunkCount
     }
 
 def mergeResults(partialResults: MiniResults):
     finalResult: Result = {}
     for i, partialResult in enumerate(partialResults):
-        if i > 0:
-            line = partialResults[i - 1]['last'] + partialResult['first']
-        else:
-            line = partialResult['first']
+        line = (partialResults[i - 1]['last'] if i > 0 else b"") + partialResult['first']
         processLine(line.decode('utf-8'), finalResult)
 
         miniResult = partialResult['miniResult']
@@ -107,39 +97,25 @@ def prettyPrint(result: Result):
         average = result[key]['total'] / result[key]['count']
         finalString += f"{key}={round(result[key]['min'], 1)}/{round(average, 1)}/{round(result[key]['max'], 1)}, "
 
-    return finalString[:len(finalString) - 2] + '}\n'
+    return finalString[:-2] + '}\n'
 
 def main():
     filePath = '../measurements.txt'
     file = open(filePath, 'rb')
     chunkSize = 1 << 24
     chunkCount = math.ceil(os.fstat(file.fileno()).st_size / chunkSize)
+    miniResults: MiniResults = []
 
     # Multiprocessor
-    batch_size = 16
+    batchSize = 32
     chunks = [ (filePath, i, chunkSize) for i in range(chunkCount) ]
-    miniResults: MiniResults = []
-    with Pool(processes=batch_size) as pool:
-        for i in range(0, len(chunks), batch_size):
-            batch = chunks[i:i+batch_size]
-            batch_results = pool.starmap(processChunk, batch)
-            miniResults.extend(batch_results)
-
-    # Multithreaded NOT multiprocessor
-    # num_threads = 64
-    # chunkCount = math.ceil(os.fstat(file.fileno()).st_size / chunkSize)
-    # with concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
-    #     futures = [executor.submit(processChunk, filePath, i, chunkSize) for i in range(chunkCount)]
-    #     
-    #     for future in concurrent.futures.as_completed(futures):
-    #         print('DONE', time.time() - start)
-    #         miniResults.append(
-    #             future.result()
-    #         )
-    # miniResults = sorted(miniResults, key=lambda x: x['chunkCount'])
+    with Pool(processes=batchSize) as pool:
+        for i in range(0, len(chunks), batchSize):
+            batch = chunks[i:i+batchSize]
+            batchResults = pool.starmap(processChunk, batch)
+            miniResults.extend(batchResults)
 
     # Single threaded
-    # miniResults: MiniResults = []
     # for i in range(chunkCount):
     #     miniResults.append(
     #         processChunk(filePath, i, chunkSize)
@@ -147,8 +123,7 @@ def main():
     #     print(time.time() - start)
 
     finalResult = mergeResults(miniResults)
-    finalString = prettyPrint(finalResult)
-    return finalString
+    return prettyPrint(finalResult)
 
 if __name__ == '__main__':
     start = time.time()
@@ -159,14 +134,5 @@ if __name__ == '__main__':
         answer = file.read()
         # print('THIS IS THE ANSWER\n', answer)
         # print('THIS IS THE RESULT\n', finalString)
-
-        # # Show diff between result and answer
-        # diff = difflib.ndiff(answer, finalString)
-        # diff_list = list(diff)
-
-        # # Print only the differences
-        # for i, s in enumerate(diff_list):
-        #     if s[0] in ('-', '+'):
-        #         print(f"Line {i}: {s}")
 
         print(finalString + '\n' == answer)
