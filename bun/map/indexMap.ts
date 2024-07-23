@@ -3,7 +3,7 @@ import type {
   MapResult,
   MiniMapResult,
   WorkerReq,
-} from './types';
+} from '../types';
 
 class MyWorker {
   worker: Worker;
@@ -14,7 +14,7 @@ class MyWorker {
   };
 
   constructor(workerResults: MiniMapResult[]) {
-    const worker = new Worker('./workerMap.ts')
+    const worker = new Worker('./map/workerMap.ts')
     worker.onmessage = (e: { data: MiniMapResult }) => {
       workerResults[e.data.i] = e.data
       this.promiseInfo?.resolve()

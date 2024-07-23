@@ -56,7 +56,7 @@ class MyWorker {
   finalResult: Result;
 
   constructor(results: MiniResult[], finalResult: Result) {
-    const worker = new Worker('./workerV2.ts')
+    const worker = new Worker('./workersV2/workerV2.ts')
     worker.onmessage = (e) => {
       // process.stdout.clearLine(0);
       // process.stdout.cursorTo(0);

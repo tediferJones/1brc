@@ -1,8 +1,8 @@
 import { readdir } from "node:fs/promises";
 import { expect, test } from "bun:test";
-import { run, easyMode } from "./index";
-import { runV2 } from "./indexV2";
-import { runMap } from "./indexMap";
+import { run, easyMode } from "./base/index";
+import { runV2 } from "./workersV2/indexV2";
+import { runMap } from "./map/indexMap";
 
 const dir = await readdir('samples/')
 dir.filter(file => file.match(/\.txt$/)).toSorted().forEach(inputFile => {

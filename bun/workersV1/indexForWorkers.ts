@@ -64,7 +64,7 @@ export async function easyMode(filePath: string) {
     if (chunks.length === 256) {
       myWorkers.push(
         new Promise((resolve, reject) => {
-          const worker = new Worker('worker.js')
+          const worker = new Worker('workersV1/worker.js')
           worker.postMessage({
             // chunk: chunk.slice(endOfFristLine, startOfLastLine),
             chunk: chunks,
