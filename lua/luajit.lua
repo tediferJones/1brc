@@ -90,7 +90,7 @@ local function mergeResults(miniResults)
     if i > 1 then
       last = miniResults[i - 1].last
     end
-    print(last..first)
+    -- print(last..first)
     processLine(last..first, finalResult)
     for key, record in pairs(records) do
       if finalResult[key] == nil then
@@ -117,7 +117,7 @@ local function getSortedKeys(tab)
   end
 
   table.sort(keys)
-  print(keys)
+  -- print(keys)
   return keys
 end
 
@@ -138,19 +138,19 @@ local function prettyPrint(result)
   return str:sub(0, #str - 2)..'}\n'
 end
 
-local function compareStrings(str1, str2)
-    -- Find the length of the longer string
-    local maxLength = math.max(#str1, #str2)
-    -- Iterate through each character of the strings
-    for i = 1, maxLength do
-        local char1 = str1:sub(i, i)
-        local char2 = str2:sub(i, i)
-
-        if char1 ~= char2 then
-            print(string.format("Difference at position %d: '%s' vs '%s'", i, char1, char2))
-        end
-    end
-end
+-- local function compareStrings(str1, str2)
+--     -- Find the length of the longer string
+--     local maxLength = math.max(#str1, #str2)
+--     -- Iterate through each character of the strings
+--     for i = 1, maxLength do
+--         local char1 = str1:sub(i, i)
+--         local char2 = str2:sub(i, i)
+-- 
+--         if char1 ~= char2 then
+--             print(string.format("Difference at position %d: '%s' vs '%s'", i, char1, char2))
+--         end
+--     end
+-- end
 
 local filePath = '../measurements.txt'
 local chunkSize = bit.lshift(1, 24)
